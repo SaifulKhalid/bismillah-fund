@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+    <script src="config.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Admin Panel</h1>
+        </header>
+
+        <div class="action-buttons">
+            <button id="addMemberBtn" class="btn primary">Add Member</button>
+            <button id="addRecordBtn" class="btn secondary">Add New Record</button>
+        </div>
+
+        <!-- Add Member Form -->
+        <div id="memberForm" class="form-container hidden">
+            <h2>Add New Member</h2>
+            <form id="memberFormElement">
+                <div class="form-group">
+                    <label for="fullName">Full Name</label>
+                    <input type="text" id="fullName" required>
+                </div>
+                <div class="form-group">
+                    <label for="institution">Institution</label>
+                    <input type="text" id="institution" required>
+                </div>
+                <div class="form-group">
+                    <label for="phoneNumber">Phone Number</label>
+                    <input type="tel" id="phoneNumber" required>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn primary">Save Member</button>
+                    <button type="button" id="cancelMember" class="btn danger">Cancel</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Add Record Form -->
+        <div id="recordForm" class="form-container hidden">
+            <h2>Add New Record</h2>
+            <form id="recordFormElement">
+                <div class="form-group">
+                    <label for="memberName">Member's Name</label>
+                    <select id="memberName" required>
+                        <option value="">Select a member</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="amount">Amount of Task</label>
+                    <input type="number" id="amount" required>
+                </div>
+                <div class="form-group">
+                    <label for="receivedBy">Received By</label>
+                    <input type="text" id="receivedBy" required>
+                </div>
+                <div class="form-group">
+                    <label for="receivedIn">Received In</label>
+                    <input type="text" id="receivedIn" required>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn primary">Save Record</button>
+                    <button type="button" id="cancelRecord" class="btn danger">Cancel</button>
+                </div>
+            </form>
+        </div>
+
+        <div id="message" class="message hidden"></div>
+    </div>
+
+    <script>
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        // DOM elements
+        const addMemberBtn = document.getElementById('addMemberBtn');
+        const addRecordBtn = document.getElementById('addRecordBtn');
+        const memberForm = document.getElementById('memberForm');
+        const recordForm = document.getElementById('recordForm');
+        const memberFormElement = document.getElementById('memberFormElement');
+        const recordFormElement = document.getElementById('recordFormElement');
+        const cancelMember = document.getElementById('cancelMember');
+        const cancelRecord = document.getElementById('cancelRecord');
+        const messageDiv = document.getElementById('message');
+        const memberDropdown = document.getElementById('memberName');
+
+        // Load members for dropdown
+        function loadMembers() {
+            db.collection("members").get().then((querySnapshot) => {
+                memberDropdown.innerHTML = '<option value="">Select a member</option>';
+                querySnapshot.forEach((doc) => {
+                    const member = doc.data();
+                    memberDropdown.innerHTML += `<option value="${doc.id}">${member.fullName} (${member.institution})</option>`;
+                });
+            }).catch((error) => {
+                showMessage("Error loading members: " + error.message, 'error');
+            });
+        }
+
+        // Show/hide forms
+        addMemberBtn.addEventListener('click', () => {
+            memberForm.classList.remove('hidden');
+            recordForm.classList.add('hidden');
+            memberFormElement.reset();
+        });
+
+        addRecordBtn.addEventListener('click', () => {
+            loadMembers();
+            recordForm.classList.remove('hidden');
+            memberForm.classList.add('hidden');
+            recordFormElement.reset();
+        });
+
+        cancelMember.addEventListener('click', () => {
+            memberForm.classList.add('hidden');
+        });
+
+        cancelRecord.addEventListener('click', () => {
+            recordForm.classList.add('hidden');
+        });
+
+        // Save member to Firebase
+        memberFormElement.addEventListener('submit', (e) => {
+            e.preventDefault();
+            
+            const fullName = document.getElementById('fullName').value;
+            const institution = document.getElementById('institution').value;
+            const phoneNumber = document.getElementById('phoneNumber').value;
+
+            db.collection("members").add({
+                fullName: fullName,
+                institution: institution,
+                phoneNumber: phoneNumber,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            })
+            .then(() => {
+                showMessage("Member added successfully!", 'success');
+                memberFormElement.reset();
+                memberForm.classList.add('hidden');
+            })
+            .catch((error) => {
+                showMessage("Error adding member: " + error.message, 'error');
+            });
+        });
+
+        // Save record to Firebase
+        recordFormElement.addEventListener('submit', (e) => {
+            e.preventDefault();
+            
+            const memberId = document.getElementById('memberName').value;
+            const amount = document.getElementById('amount').value;
+            const receivedBy = document.getElementById('receivedBy').value;
+            const receivedIn = document.getElementById('receivedIn').value;
+
+            // Get member name for the record
+            db.collection("members").doc(memberId).get()
+                .then((doc) => {
+                    if (doc.exists) {
+                        const memberName = doc.data().fullName;
+                        
+                        return db.collection("records").add({
+                            memberId: memberId,
+                            memberName: memberName,
+                            amount: amount,
+                            receivedBy: receivedBy,
+                            receivedIn: receivedIn,
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                    } else {
+                        throw new Error("Member not found");
+                    }
+                })
+                .then(() => {
+                    showMessage("Record added successfully!", 'success');
+                    recordFormElement.reset();
+                    recordForm.classList.add('hidden');
+                })
+                .catch((error) => {
+                    showMessage("Error adding record: " + error.message, 'error');
+                });
+        });
+
+        // Show message
+        function showMessage(message, type) {
+            messageDiv.textContent = message;
+            messageDiv.className = `message ${type}`;
+            messageDiv.classList.remove('hidden');
+            
+            setTimeout(() => {
+                messageDiv.classList.add('hidden');
+            }, 3000);
+        }
+
+        // Load members on page load
+        document.addEventListener('DOMContentLoaded', loadMembers);
+    </script>
+</body>
+</html>
